@@ -1,6 +1,7 @@
 import sklearn.preprocessing as preprocessing
 from scipy.signal import correlate
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 
@@ -57,10 +58,9 @@ def get_window(indexes, signal, win_size = 5):
             window (2D-array)
         
     '''
-    indexes = indexes[np.where(indexes>win_size)[0]]
+    indexes = indexes[np.where( (indexes>win_size) & (indexes < (len(signal) -win_size) ) )[0]]
     if len(indexes) == 0:
-        return np.array([])
-    
+        return np.array([]).reshape(0, 2*win_size + 1)    
     
     window = np.array([signal[index-win_size:index+win_size+1] for index in indexes])
     return window
@@ -94,17 +94,51 @@ def stack_windows(index_dict, target_signal, win_size = 5):
         
     return windows_dict
 
-def combine_windows(window_list, reverse = True):
-    pass
-
 
 def create_triangle(windows_dict, average = False):
     
-    pass
-    '''
-    for i in range(len(windows_dict)):
+    triangle = list()
+    for i in range(1, len(windows_dict) + 1):
+        
+        combined = np.concatenate( ( windows_dict[i][0], windows_dict[i][1][:, ::-1]))
+        if average and combined.size:
+            combined = combined.mean(axis = 0, keepdims = True)
+        
+        triangle.append(combined)
+        
+    return np.vstack(triangle)
+        
+    
+def plot_triangle(index_dict, signal, figsize = (10, 8), win_size = 10, average = True, fold = False):
+
+    windows_dict = stack_windows(index_dict,signal, win_size)
+    triangle = create_triangle(windows_dict, average)
+    fig = plt.figure( figsize=figsize)
+    if fold:
+        
+        mask = triangle > np.percentile(triangle, 25)
+        median = np.median(triangle[mask])
+        enrich = np.clip(triangle/median, 0, 2)
+        plt.imshow(enrich, cmap = 'bwr', vmin = 0, vmax = 2, extent  = [ -(triangle.shape[1]-1)*100/2, (triangle.shape[1]-1)*100/2, triangle.shape[0], 0 ], aspect = 'auto' )
+    else:
+        
+        plt.imshow(triangle, cmap = 'bwr', vmin = -1, vmax = 1, extent  = [ -(triangle.shape[1]-1)*100/2, (triangle.shape[1]-1)*100/2, triangle.shape[0], 0 ], aspect = 'auto' )
+    plt.colorbar()
+    plt.xlabel("Kilobases");
+    plt.close(fig)
+    return fig
+    
         
         
-        windows_dict[i][0] 
         
-    '''
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
