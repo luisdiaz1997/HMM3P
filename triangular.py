@@ -109,7 +109,7 @@ def create_triangle(windows_dict, average = False):
     return np.vstack(triangle)
         
     
-def plot_triangle(index_dict, signal, figsize = (10, 8), win_size = 10, average = True, fold = False):
+def plot_triangle(index_dict, signal, figsize = (10, 8), win_size = 10, average = True, fold = False, title = None):
 
     windows_dict = stack_windows(index_dict,signal, win_size)
     triangle = create_triangle(windows_dict, average)
@@ -123,8 +123,11 @@ def plot_triangle(index_dict, signal, figsize = (10, 8), win_size = 10, average 
     else:
         
         plt.imshow(triangle, cmap = 'bwr', vmin = -1, vmax = 1, extent  = [ -(triangle.shape[1]-1)*100/2, (triangle.shape[1]-1)*100/2, triangle.shape[0], 0 ], aspect = 'auto' )
+    
+    if title:
+        plt.title(title)
     plt.colorbar()
-    plt.xlabel("Kilobases");
+    plt.xlabel("Kb");
     plt.close(fig)
     return fig
     
