@@ -8,7 +8,7 @@ import pandas as pd
 '''
 
 def transmat_3():
-    transmat = np.array([[0.3, 0.01, 0.7], [0.1, 0.9, 0.1], [0.7, 0.01, 0.3]])
+    transmat = np.array([[0.5, 0.25, 0.25], [0.25, 0.5, 0.25], [0.25, 0.25, 0.5]])
     
     transmat /= transmat.sum(axis = 1, keepdims= True)
     return transmat
@@ -131,28 +131,55 @@ class HMMC:
     def __init__(self, df):
         self.loc_eig = df.copy()
         self.mask = ~self.loc_eig.E1.isna()
-        self.data = self.loc_eig.E1[self.mask].values
+        
+        
+        self.data = [self.loc_eig.E1[(self.mask) & (self.loc_eig.chrom == ch)].values  for ch in self.loc_eig.chrom.unique()] 
+        
         
     
     def analyze(self):
-        self.model, self.predicted = train_models(self.data.reshape(-1,1))
-        self.check_model()
         indexes = self.mask[self.mask].index
+            
+        #Create binary model
         conditions, choices = [(self.loc_eig.E1 >= 0), (self.loc_eig.E1 <  0)], [1,0]
         self.loc_eig['binary']  = np.select(conditions, choices, default= np.nan)
         
+        
+        i = 1
+        
+        self.predicted = dict()
+        for dat in self.data:
+            if len(dat) == 0:
+                continue
+            model, pred = train_models(dat.reshape(-1,1))
+            
+            #Check if model is shifted
+            if self.check_model(model):
+                break
+            
+            for key, value in pred.items():
+                
+                self.predicted[key] = np.concatenate( (self.predicted.get(key, np.array([])), value))
+            
+        
+            
         for n in range(2,7):
             self.loc_eig['HMM' + str(n)] = pd.Series(data = self.predicted[n], index = indexes)
             
+        
+            
+            
         signal = self.loc_eig.HMM3.values[indexes]
+        
+        #Create Post Processed 3 to 5 state model
         postsignal = postprocess(signal)
         self.loc_eig['HMM5_2'] = pd.Series(data = postsignal, index = indexes)
         
             
-    def check_model(self):
+    def check_model(self, model):
         shifted = False
         for n in range(2,7):
-            l = self.model[n].means_
+            l = model[n].means_
             flag = 0
             if(not np.array_equal(l, np.sort(l, axis = 0))):
                 print('Model ' + str(n) + ' Means shifted')

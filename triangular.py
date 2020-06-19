@@ -96,6 +96,9 @@ def stack_windows(index_dict, target_signal, win_size = 5):
 
 
 def create_triangle(windows_dict, average = False):
+    '''
+        Creates the triangular numpy array from windows_dict
+    '''
     
     triangle = list()
     for i in range(1, len(windows_dict) + 1):
@@ -107,19 +110,45 @@ def create_triangle(windows_dict, average = False):
         triangle.append(combined)
         
     return np.vstack(triangle)
+
+
+def get_triangle(index_dict, signal, win_size = 10, average = True, fold = False):
+    '''
+        Creates triangle from index_dict
+        
+        Returns:
+            Numpy array triangle
+    '''
+    windows_dict = stack_windows(index_dict,signal, win_size)
+    triangle = create_triangle(windows_dict, average)
+    
+    if fold:
+        mask = triangle > np.percentile(triangle, 25)
+        median = np.median(triangle[mask])
+        enrich = np.clip(triangle/median, 0, 2)
+        return enrich
+    
+    return triangle
+        
+    
+    
+# def fake_triangle(index_dict):
+    
+#     for key, val in index_dict.items():
+        
+    
+
         
     
 def plot_triangle(index_dict, signal, figsize = (10, 8), win_size = 10, average = True, fold = False, title = None):
 
-    windows_dict = stack_windows(index_dict,signal, win_size)
-    triangle = create_triangle(windows_dict, average)
+    
+    triangle = get_triangle(index_dict, signal, win_size, average, fold)
+    
     fig = plt.figure( figsize=figsize)
     if fold:
         
-        mask = triangle > np.percentile(triangle, 25)
-        median = np.median(triangle[mask])
-        enrich = np.clip(triangle/median, 0, 2)
-        plt.imshow(enrich, cmap = 'bwr', vmin = 0, vmax = 2, extent  = [ -(triangle.shape[1]-1)*100/2, (triangle.shape[1]-1)*100/2, triangle.shape[0], 0 ], aspect = 'auto' )
+        plt.imshow(triangle, cmap = 'bwr', vmin = 0, vmax = 2, extent  = [ -(triangle.shape[1]-1)*100/2, (triangle.shape[1]-1)*100/2, triangle.shape[0], 0 ], aspect = 'auto' )
     else:
         
         plt.imshow(triangle, cmap = 'bwr', vmin = -1, vmax = 1, extent  = [ -(triangle.shape[1]-1)*100/2, (triangle.shape[1]-1)*100/2, triangle.shape[0], 0 ], aspect = 'auto' )
