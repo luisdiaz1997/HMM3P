@@ -92,7 +92,7 @@ def plot_map(cooler_obj, track, chrom, signal = "E1"):
 def plot_map_plotly(cooler_obj, track, chrom, signal = "HMM3"):
     loc_eig = track[track.chrom==chrom].copy().reset_index()
     masked_signal = loc_eig[loc_eig['E1'] == loc_eig['E1']]
-    indexes_t = np.where(np.abs(np.diff(masked_signal['binary'])) > 0)[0] + 1
+    indexes_t = np.where(np.abs(np.diff(masked_signal[signal])) > 0)[0] + 1
     line_loc = masked_signal.iloc[indexes_t].index.values #indexes of lines
     
     
@@ -121,7 +121,8 @@ def plot_map_plotly(cooler_obj, track, chrom, signal = "HMM3"):
             autorange=False
             ,domain=[0.12, 1]
             ,side="top"
-            ,range=[0, len(arr) -1]
+#             ,range=[0, len(arr) -1]
+            ,range=[80, 200]
             ,tickfont=dict(family='Rockwell', color='black', size=6)
             ,scaleanchor="y"
             ,showgrid=False
@@ -133,7 +134,8 @@ def plot_map_plotly(cooler_obj, track, chrom, signal = "HMM3"):
              
             domain=[0, 0.88]
             ,autorange= False
-            ,range=[len(arr) -1, 0]
+#             ,range=[len(arr) -1, 0]
+            ,range=[120, 0]
             ,tickangle=-90
             ,tickfont=dict(family='Rockwell', color='black', size=6)
             ,showgrid=False

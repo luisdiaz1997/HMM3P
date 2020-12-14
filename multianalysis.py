@@ -40,7 +40,7 @@ def get_eigs(df, genecov_dict=None, n= 3):
     for i in range(len(df)):
         c = df.cooler.iloc[i]
         bins = c.bins()[:]
-        bins['gene_count'] = genecov_dict[df.assembly.iloc[i]]
+        bins['gene_coverage'] = genecov_dict[df.assembly.iloc[i]]
         regions = [(chrom, 0, c.chromsizes[chrom]) for chrom in c.chromnames]
         cis_vals, cis_eigs = eigdecomp.cooler_cis_eig(
                 c, 
@@ -48,7 +48,7 @@ def get_eigs(df, genecov_dict=None, n= 3):
                 regions = regions,
                 n_eigs=n, 
                 balance=True,
-                phasing_track_col='gene_count',
+                phasing_track_col='gene_coverage',
                 ignore_diags = 4, clip_percentile=99)
         tracks.append(cis_eigs)
         vals.append(cis_vals)

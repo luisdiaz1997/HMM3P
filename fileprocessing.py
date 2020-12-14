@@ -17,7 +17,11 @@ def cools_df(cools, resolution = 100000):
                       columns=['cell_line', 'assembly', 'path'])
     c_list = list()
     for i in range(len(df)):
-        c_list.append(cooler.Cooler(df.iloc[i]['path'] + '::/resolutions/' + str(resolution)))
+        try:
+            cooler_obj = cooler.Cooler(df.iloc[i]['path'] + '::/resolutions/' + str(resolution))
+            c_list.append(cooler_obj)
+        except:
+            c_list.append(float("NaN"))
 
     df['cooler'] = pd.Series(c_list)
 

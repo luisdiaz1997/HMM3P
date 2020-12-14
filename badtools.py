@@ -1,33 +1,99 @@
+# from bioframe.util import tsv
+# from bioframe.util import bedtools
+
 from bioframe.tools import bedtools
 from bioframe.io.process import tsv
+
 import numpy as np
 
 '''
     All the tools in this package that deal with bedtools and bioframe
 '''
 
-def bedtools_intersect(left, right, **kwargs):
-    
+def get_chips(beds_df, cell_line, assembly, output_type=None, replicate = None):
+    '''
+        Filter chipseq dataset// in progress
+    '''
+    loc = beds_df[( beds_df.cell_line == cell_line)& 
+                  (beds_df.assembly == assembly)                 ]
+
+    loc = loc.sort_values(by='target')
+    loc = loc.reset_index(drop = True)
+    return loc
+
+
+def bedtools_intersect(left, right, chromhmm=False, **kwargs):
     '''
         left: takes dataframe
         right: file location of bed file
-        
+
     '''
-   
+
     with tsv(left) as a:
-        out = bedtools.intersect(a=a.name, b=right,wa=False, wb=False, loj=True, **kwargs)
-        columns = left.columns.tolist() + ['chrom_p', 'start_p', 'end_p', 'name_p', 'score', 'strand', 'signalValue', 'pValue', 'qValue', 'peak']
-        out.columns = columns
-        out['signalValue'] = out['signalValue'].apply(lambda a: a.replace('.', '0'))
-        out['signalValue'] = out['signalValue'].astype(float)
+        out = bedtools.intersect(a=a.name, b=right, wa=False, wb=False, loj=True, **kwargs)
         
+        if chromhmm:
+            columns = left.columns.tolist() + ['chrom_p', 'start_p', 'end_p', 'name_p']
+            out = out.iloc[:, :len(columns)]
+            out.columns = columns
+            out['name_p'] = out['name_p'].astype('str')
+        else:
+            columns = left.columns.tolist() + ['chrom_p', 'start_p', 'end_p', 'name_p', 'score', 'strand', 'signalValue', 'pValue', 'qValue', 'peak']
+            out.columns = columns
+            out['signalValue'] = out['signalValue'].apply(lambda a: a.replace('.', '0'))
+            out['signalValue'] = out['signalValue'].astype(float)
+
     return out
+
+def bedtools_intersect_basePairs(a, b, hmm_state, rsuffix='_', **kwargs):
+    """
+    >>> ixn = bedtools_intersect(bed1, bed2, wao=True), needed to delete other keys b/c they clashed
+   """
+    
+    out = bedtools.intersect(a=a,b=b,wao=True)
+    out = out.drop(list(np.arange(4,10)) + list(np.arange(13, 18)), axis =1)
+    out.columns = ['chrom', 'start', 'end', hmm_state, 'start_p', 'end_p', 'name_p', 'bp']
+    #out.columns = list(left.columns) + [c+rsuffix if c in left.columns else c for c in right.columns] + ['bpOverlap']
+    return out
+
+
+def bp_over_total(inter_df, hmm_state='HMM3'):
+    
+    n_states = inter_df[hmm_state].unique()
+    n_states = n_states[n_states == n_states]
+    n_states.sort()
+    
+    mask = (inter_df['start_p']!=-1)
+    
+    total_nucleotides = (inter_df[mask]['end_p'] - inter_df[mask]['start_p'])
+    
+    return np.array([total_nucleotides[(inter_df[hmm_state]==state) & mask].sum() for state in n_states])/total_nucleotides.sum()
+
+    
+    
+def bp_over_state(inter_df, hmm_track, hmm_state='HMM3', chrom_state = False, normalize = True):
+    
+    n_states = inter_df[hmm_state].unique()
+    n_states = n_states[n_states == n_states]
+    n_states.sort()
+    
+    mask = (inter_df['start_p']!=-1)
+    if chrom_state:        
+        mask = mask & (inter_df['name_p']==chrom_state)
+  
+    total_nucleotides = (inter_df['end_p'] - inter_df['start_p'])
+    
+    if normalize:
+        return np.array([total_nucleotides[(inter_df[hmm_state]==state) & mask].sum()/(len(hmm_track[hmm_track[hmm_state]==state])) for state in n_states])/ (total_nucleotides[mask].sum()/len(hmm_track))
+    
+    else:
+        return np.array([total_nucleotides[(inter_df[hmm_state]==state) & mask].sum()/(100000*len(hmm_track[hmm_track[hmm_state]==state])) for state in n_states])
 
 
 def drop_between(df, identifier, start, end, signal):
     '''
         Drops peaks in between two bins to, the bin that contains most basepairs takes all the peak value
-    
+
         df: intersected dataframe
         indentifier: the column name of the unique identifier of each peak
         start: column name of the peaks basepair start
@@ -37,7 +103,7 @@ def drop_between(df, identifier, start, end, signal):
     same_id = df[ (df[identifier] != '.') & df.duplicated([identifier], keep=False)]
     if len(same_id) == 0:
         return df
-    
+
     l1 = same_id[(same_id[start] > same_id['start']) & ((same_id['end'] - same_id[start]) <=  (same_id[end] - same_id['end']))]
     l2 = same_id[(same_id[start] < same_id['start']) & ((same_id['start'] - same_id[start]) >  (same_id[end] - same_id['start']))]
     test = df.copy()
@@ -48,7 +114,7 @@ def drop_between(df, identifier, start, end, signal):
 
 def add_peaks(df, signal):
     '''
-        This adds all signals in the same Hi-C bin, assuming 
+        This adds all signals in the same Hi-C bin, assuming
         df: intersected hi-c and bed dataframe
         signal: column name of the signal to be added
     '''
@@ -67,7 +133,7 @@ def chip_intersect(track, bed_dir):
         track: hi-c dataframe
         bed_dir: directory of bed file
     '''
-    
+
     inter = bedtools_intersect(track, bed_dir)
     inter = drop_between(inter, identifier = 'name_p', start = 'start_p', end = 'end_p', signal = 'signalValue')
     inter = add_peaks(inter, signal = 'signalValue')
@@ -87,15 +153,14 @@ def fold_score(inter_track, model):
     return d/m
 
 
-def multi_fold(hic_info, hmm_track, beds_df, model, *targets):
-    
+def multi_fold(hic_info, result_track, beds_df, model, *targets):
+
     vals = list()
-    
+    beds = beds_df[( beds_df.cell_line == hic_info.cell_line)& (beds_df.target == target) & (beds_df.assembly == hic_info.assembly)]
+
     for target in targets:
-        
-        beds = beds_df[( beds_df.cell_line == hic_info.cell_line)& (beds_df.target == target) & (beds_df.assembly == hic_info.assembly)]
-        inter = get_intersect(hmm_track, beds.iloc[0].file_location)
-        val = fold_score(inter, model)
+
+        val = fold_score(result_track, model)
         vals.append(val)
     return np.array(vals)
 
@@ -107,7 +172,7 @@ def get_window(df, chrom, signal, model, coverage):
     z= curr[curr[model]==curr[model]][model].values
     sig = curr[curr[model]==curr[model]][signal].values
     z_t = transition_indices(z)
-    
+
     bound = np.where((z_t == True))[0] ##double check boundaries
     #indexes = bound[np.where(np.diff(bound)>coverage)[0]] ##improve this later
     #print('Bound shape:', bound.shape)
