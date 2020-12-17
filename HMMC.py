@@ -1,18 +1,21 @@
 import numpy as np
 from hmmlearn import hmm
-import badtools
 import pandas as pd
 
 '''
     Tools for Hidden Markov Models with Hi-C data
 '''
 
-def transmat_3():
-    transmat = np.array([[0.5, 0.25, 0.25], [0.25, 0.5, 0.25], [0.25, 0.25, 0.5]])
-    
+
+def transmat_2():
+    transmat = np.array([[0.5, 0.5], [0.5, 0.5]])
     transmat /= transmat.sum(axis = 1, keepdims= True)
     return transmat
 
+def transmat_3():
+    transmat = np.array([[0.5, 0.25, 0.25], [0.25, 0.5, 0.25], [0.25, 0.25, 0.5]])
+    transmat /= transmat.sum(axis = 1, keepdims= True)
+    return transmat
 
 def transmat_4():
     n_states = 4
@@ -69,20 +72,23 @@ def transmat_6():
     transmat /=  np.sum(transmat,axis=1)[:,None]
     return transmat
 
+transmat_dict = {2:transmat_2(), 
+                 3:transmat_3(),
+                 4:transmat_4(),
+                 5:transmat_5(),
+                 6:transmat_6(),}
+
 def percentiles_val(n):
     return np.append([20], np.append(50 if n== 3 else np.linspace(45, 55, n-2), np.array([80])))  
 
-
-
-def build_model(data ,n_components,  n_iter = 30, transmat = 1.0):
+def build_model(data ,n_components,  n_iter = 100):
+    transmat = transmat_dict[n_components]
     means = np.percentile(data, percentiles_val(n_components)).reshape(-1,1)
-    if not (type(transmat) == type(1.0)): n_iter = 100
     model = hmm.GaussianHMM(n_components,
                         algorithm = 'viterbi',
-                        transmat_prior= transmat if(type(transmat) == type(1.0)) else   1+ (10**(n_components-2))*transmat,
+                        transmat_prior= 1+ (10**(n_components-2))*transmat,
                         means_weight = 10 if n_components==2 else 10e4,
                         means_prior = means,
-
                         covariance_type='diag', 
                         params='smct',
                         init_params='sc', 
@@ -103,9 +109,12 @@ def build_model(data ,n_components,  n_iter = 30, transmat = 1.0):
     return model
 
 
-def train_models(data):
-    transmat = {3:transmat_3(), 4:transmat_4(), 5:transmat_5(), 6:transmat_6()}
-    models = { n:build_model(data, n, transmat = transmat.get(n, 1.0)) for n in range(2,7) }
+def train_models(data, transmat_type='diag'):
+    if transmat_type is 'diag':
+        transmat_dict = transmat_dict_diag
+    elif transmat_type is 'constrained':
+        transmat_dict = transmat_dict_constrained
+    models = { n:build_model(data, n, transmat = transmat_dict[n] for n in range(2,7) }
     predicted = { n:models[n].predict(data) for n in range(2,7)}
     return models, predicted
 
