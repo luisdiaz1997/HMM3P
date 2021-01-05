@@ -1,61 +1,9 @@
-# from bioframe.util import tsv
-# from bioframe.util import bedtools
-
-from bioframe.tools import bedtools
-from bioframe.io.process import tsv
-
+from bioframe as bioframe
 import numpy as np
 
 '''
     All the tools in this package that deal with bedtools and bioframe
 '''
-
-def get_chips(beds_df, cell_line, assembly, output_type=None, replicate = None):
-    '''
-        Filter chipseq dataset// in progress
-    '''
-    loc = beds_df[( beds_df.cell_line == cell_line)& 
-                  (beds_df.assembly == assembly)                 ]
-
-    loc = loc.sort_values(by='target')
-    loc = loc.reset_index(drop = True)
-    return loc
-
-
-def bedtools_intersect(left, right, chromhmm=False, **kwargs):
-    '''
-        left: takes dataframe
-        right: file location of bed file
-
-    '''
-
-    with tsv(left) as a:
-        out = bedtools.intersect(a=a.name, b=right, wa=False, wb=False, loj=True, **kwargs)
-        
-        if chromhmm:
-            columns = left.columns.tolist() + ['chrom_p', 'start_p', 'end_p', 'name_p']
-            out = out.iloc[:, :len(columns)]
-            out.columns = columns
-            out['name_p'] = out['name_p'].astype('str')
-        else:
-            columns = left.columns.tolist() + ['chrom_p', 'start_p', 'end_p', 'name_p', 'score', 'strand', 'signalValue', 'pValue', 'qValue', 'peak']
-            out.columns = columns
-            out['signalValue'] = out['signalValue'].apply(lambda a: a.replace('.', '0'))
-            out['signalValue'] = out['signalValue'].astype(float)
-
-    return out
-
-def bedtools_intersect_basePairs(a, b, hmm_state, rsuffix='_', **kwargs):
-    """
-    >>> ixn = bedtools_intersect(bed1, bed2, wao=True), needed to delete other keys b/c they clashed
-   """
-    
-    out = bedtools.intersect(a=a,b=b,wao=True)
-    out = out.drop(list(np.arange(4,10)) + list(np.arange(13, 18)), axis =1)
-    out.columns = ['chrom', 'start', 'end', hmm_state, 'start_p', 'end_p', 'name_p', 'bp']
-    #out.columns = list(left.columns) + [c+rsuffix if c in left.columns else c for c in right.columns] + ['bpOverlap']
-    return out
-
 
 def bp_over_total(inter_df, hmm_state='HMM3'):
     
@@ -134,7 +82,7 @@ def chip_intersect(track, bed_dir):
         bed_dir: directory of bed file
     '''
 
-    inter = bedtools_intersect(track, bed_dir)
+    inter = bf.intersect(track, bed_dir)
     inter = drop_between(inter, identifier = 'name_p', start = 'start_p', end = 'end_p', signal = 'signalValue')
     inter = add_peaks(inter, signal = 'signalValue')
     return inter
