@@ -45,7 +45,7 @@ def get_genecov(df):
     genecov_dict = dict()
     for assembly in df.assembly.unique():
         bins = df[df.assembly == assembly]['cooler'].iloc[0].bins()[:]
-        genecov = bioframe.tools.frac_gene_coverage(bins, assembly)
+        genecov = bioframe.genomeops.frac_gene_coverage(bins, assembly)
         genecov_dict[assembly] = genecov['gene_coverage']
 
     return genecov_dict
