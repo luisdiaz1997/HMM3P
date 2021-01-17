@@ -10,6 +10,7 @@ import pandas as pd
 def make_transmat(n_states, constrained=False):
     transmat = np.ones((n_states, n_states)) / n_states
     np.fill_diagonal(transmat, (1 - 1 / n_states))
+    # np.fill_diagonal(transmat, 0.75)
 
     if n_states is 4 and constrained is True:
         small = 1e-4
@@ -47,8 +48,8 @@ def make_transmat(n_states, constrained=False):
 
 def init_percentiles(n):
     return np.append(
-        np.array([20]),
-        np.append(50 if n == 3 else np.linspace(45, 55, n - 2), np.array([80])),
+        np.array([18]),
+        np.append(50 if n == 3 else np.linspace(45, 55, n - 2), np.array([82])),
     )
 
 def build_model(data, n_components, n_iter=100, constrain_transmat=False):
@@ -70,8 +71,8 @@ def build_model(data, n_components, n_iter=100, constrain_transmat=False):
 
     startprob = np.zeros(n_components)
     startprob[:] = 0.1
-    startprob[0] = 0.4
-    startprob[-1] = 0.4
+    startprob[0] = 0.45
+    startprob[-1] = 0.45
     startprob /= np.sum(startprob)
     model.startprob_ = startprob
 
@@ -113,6 +114,12 @@ class HMMC:
                 self.loc_eig.E1[(self.mask) & (self.loc_eig.chrom == ch)].values
                 for ch in self.loc_eig.chrom.unique()
             ]
+        else:
+            self.data = [
+                self.loc_eig.E1[(self.mask) & (self.loc_eig.chrom == ch) 
+                & (self.loc_eig.start >= start) & (self.loc_eig.end <= end)].values
+                for ch, start, end in regions]
+
 
         self.constrain_transmat = constrain_transmat
 
@@ -157,6 +164,8 @@ class HMMC:
         return shifted
 
 def auto_analyze(df, constrain_transmat=False, regions=None):
+    if regions:
+        print("Using custom regions")
     a = HMMC(df, constrain_transmat=constrain_transmat, regions=regions)
     a.analyze()
     return a.loc_eig
