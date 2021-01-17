@@ -104,14 +104,15 @@ def postprocess_3_to_5_states(signal):
 
 
 class HMMC:
-    def __init__(self, df, constrain_transmat=False):
+    def __init__(self, df, constrain_transmat=False, regions=None):
         self.loc_eig = df.copy()
         self.mask = ~self.loc_eig.E1.isna()
 
-        self.data = [
-            self.loc_eig.E1[(self.mask) & (self.loc_eig.chrom == ch)].values
-            for ch in self.loc_eig.chrom.unique()
-        ]
+        if regions is None:
+            self.data = [
+                self.loc_eig.E1[(self.mask) & (self.loc_eig.chrom == ch)].values
+                for ch in self.loc_eig.chrom.unique()
+            ]
 
         self.constrain_transmat = constrain_transmat
 
@@ -155,7 +156,7 @@ class HMMC:
 
         return shifted
 
-def auto_analyze(df, constrain_transmat=False):
-    a = HMMC(df, constrain_transmat=constrain_transmat)
+def auto_analyze(df, constrain_transmat=False, regions=None):
+    a = HMMC(df, constrain_transmat=constrain_transmat, regions=regions)
     a.analyze()
     return a.loc_eig
