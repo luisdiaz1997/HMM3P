@@ -1,0 +1,7 @@
+file_accession	biosample_term_name	experiment_target	suffixes
+ENCFF180LKW	GM12878	H3K27ac-human	_Broad
+ENCFF167NBF	GM12878	H3K27me3-human	_Broad
+ENCFF662QFK	GM12878	H3K36me3-human	_UW
+ENCFF682WPF	GM12878	H3K4me1-human	_Broad
+ENCFF364OXN	GM12878	CTCF-human	_Broad
+ENCFF368HBX	GM12878	POLR2A-human	_HAIB
