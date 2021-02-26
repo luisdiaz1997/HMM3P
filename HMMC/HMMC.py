@@ -180,7 +180,9 @@ def _postprocess_seg(seg_df, state, regions, constrain_transmat):
     else: 
         seg, bic = _run_model(seg_df, _get_state_num(state),
                               regions, constrain_transmat)    
-    sig = seg - 1  # sig is -1, 0, 1
+    mask = np.isnan(seg)
+    hmm3p = np.zeros(np.shape(seg)) * np.nan
+    sig = seg[mask] - 1  # sig is -1, 0, 1
     sig_d = np.append(0, np.diff(sig))  # signal of changes
     changes = np.where(sig_d != 0)[0]  # where do changes happen
     changes_d = np.append(np.diff(sig_d[changes]), 0)  # changes of changes,
@@ -189,7 +191,8 @@ def _postprocess_seg(seg_df, state, regions, constrain_transmat):
     for start, end in zip(changes[interest[0]], changes[interest[0] + 1]):
         if sig[start] == 0:
             correction[start:end] = sig[end]
-    return sig * 2 + correction + 2
+    hmm3p[mask] =  sig * 2 + correction + 2
+    return hmm3p
 
 def _check_model(model):
     l = model.means_
