@@ -69,14 +69,6 @@ def _build_model(data, n_components, constrain_transmat=False, n_iter=100, ):
     )
 
     model.transmat_ = transmat
-
-    startprob = np.zeros(n_components)
-    startprob[:] = 0.1
-    startprob[0] = 0.45
-    startprob[-1] = 0.45
-    startprob /= np.sum(startprob)
-    model.startprob_ = startprob
-
     model.means_ = means
     model.fit(data)
     return model
@@ -116,10 +108,11 @@ def _get_state_num(state):
     return int("".join(filter(str.isdigit, state)))
 
 def get_segmentation(eig_df, 
-                    state_list= ["binary", "HMM3postproc"], 
+                    state_list= ["binary", "HMM3P"], 
                     regions = None, 
                     constrain_transmat=False,
-                    return_BIC_dict = False ):
+                    return_BIC_dict = False,
+                    verbose = False):
     """Obtain segmentations with HMMs for specified set of states. 
 
         Parameters
@@ -131,7 +124,7 @@ def get_segmentation(eig_df,
             List of HMM states for obtaining segmentations, provided as 
             'HMM2', 'HMM3', etc.
             'binary' calculates the naive binary segmentation.
-            'HMM3postproc' calculates the postprocessed 3-state HMM segmentation.  
+            'HMM3P' calculates the postprocessed 3-state HMM segmentation.  
         
         regions : pandas.Dataframe
             Genomic intervals stored as a DataFrame, used to limit calculation of the segmentation.
@@ -156,11 +149,13 @@ def get_segmentation(eig_df,
         regions = seg_df.chrom.unique()
 
     for state in state_list:
+        if verbose is True: 
+            print('generating segmentation for '+state)
         try: 
             if state is 'binary':
                 seg = (seg_df.E1.copy())
                 seg[mask] = seg[mask] >0        
-            elif 'postproc' in state:
+            elif '3P' in state:
                 seg = _postprocess_seg(seg_df, state, 
                                       regions, constrain_transmat)
             elif 'HMM' in state:
