@@ -69,14 +69,6 @@ def _build_model(data, n_components, constrain_transmat=False, n_iter=100, ):
     )
 
     model.transmat_ = transmat
-
-    startprob = np.zeros(n_components)
-    startprob[:] = 0.1
-    startprob[0] = 0.45
-    startprob[-1] = 0.45
-    startprob /= np.sum(startprob)
-    model.startprob_ = startprob
-
     model.means_ = means
     model.fit(data)
     return model
@@ -116,10 +108,11 @@ def _get_state_num(state):
     return int("".join(filter(str.isdigit, state)))
 
 def get_segmentation(eig_df, 
-                    state_list= ["binary", "HMM3postproc"], 
+                    state_list= ["binary", "HMM3P"], 
                     regions = None, 
                     constrain_transmat=False,
-                    return_BIC_dict = False ):
+                    return_BIC_dict = False,
+                    verbose = False):
     """Obtain segmentations with HMMs for specified set of states. 
 
         Parameters
@@ -131,7 +124,7 @@ def get_segmentation(eig_df,
             List of HMM states for obtaining segmentations, provided as 
             'HMM2', 'HMM3', etc.
             'binary' calculates the naive binary segmentation.
-            'HMM3postproc' calculates the postprocessed 3-state HMM segmentation.  
+            'HMM3P' calculates the postprocessed 3-state HMM segmentation.  
         
         regions : pandas.Dataframe
             Genomic intervals stored as a DataFrame, used to limit calculation of the segmentation.
@@ -156,11 +149,13 @@ def get_segmentation(eig_df,
         regions = seg_df.chrom.unique()
 
     for state in state_list:
+        if verbose is True: 
+            print('generating segmentation for '+state)
         try: 
             if state is 'binary':
                 seg = (seg_df.E1.copy())
                 seg[mask] = seg[mask] >0        
-            elif 'postproc' in state:
+            elif '3P' in state:
                 seg = _postprocess_seg(seg_df, state, 
                                       regions, constrain_transmat)
             elif 'HMM' in state:
@@ -185,7 +180,9 @@ def _postprocess_seg(seg_df, state, regions, constrain_transmat):
     else: 
         seg, bic = _run_model(seg_df, _get_state_num(state),
                               regions, constrain_transmat)    
-    sig = seg - 1  # sig is -1, 0, 1
+    mask = np.isnan(seg)
+    hmm3p = np.zeros(np.shape(seg)) * np.nan
+    sig = seg[mask] - 1  # sig is -1, 0, 1
     sig_d = np.append(0, np.diff(sig))  # signal of changes
     changes = np.where(sig_d != 0)[0]  # where do changes happen
     changes_d = np.append(np.diff(sig_d[changes]), 0)  # changes of changes,
@@ -194,104 +191,10 @@ def _postprocess_seg(seg_df, state, regions, constrain_transmat):
     for start, end in zip(changes[interest[0]], changes[interest[0] + 1]):
         if sig[start] == 0:
             correction[start:end] = sig[end]
-    return sig * 2 + correction + 2
+    hmm3p[mask] =  sig * 2 + correction + 2
+    return hmm3p
 
 def _check_model(model):
     l = model.means_
     if not np.array_equal(l, np.sort(l, axis=0)):
         raise ValueError('state means shifted during model training')
-
-
-
-##### old version #####
-
-
-def postprocess_3_to_5_states(signal):
-    if len(np.unique(signal)) is not 3:
-        raise ValueError("signal must have 3 states")
-    sig = signal - 1  # signal is -1, 0, 1
-    sig_d = np.append(0, np.diff(sig))  # signal of changes
-    changes = np.where(sig_d != 0)[0]  # where do changes happen
-    changes_d = np.append(np.diff(sig_d[changes]), 0)  # changes of changes,
-    print(changes_d)
-    interest = np.where((np.abs(changes_d) == 2))
-
-    correction = np.zeros(sig.shape)
-
-    for start, end in zip(changes[interest[0]], changes[interest[0] + 1]):
-        if sig[start] == 0:
-            correction[start:end] = sig[end]
-    return sig * 2 + correction + 2
-
-
-def train_models(data, constrain_transmat=False):
-    if constrain_transmat is True: print('training constrained models')
-    models = {n: _build_model(data, n, constrain_transmat=constrain_transmat) for n in range(2, 7)}
-    predicted = {n: models[n].predict(data) for n in range(2, 7)}
-    return models, predicted
-
-class HMMC:
-    def __init__(self, df, constrain_transmat=False, regions=None):
-        self.loc_eig = df.copy()
-        self.mask = ~self.loc_eig.E1.isna()
-
-        if regions is None:
-            self.data = [
-                self.loc_eig.E1[(self.mask) & (self.loc_eig.chrom == ch)].values
-                for ch in self.loc_eig.chrom.unique()
-            ]
-        else:
-            self.data = [
-                self.loc_eig.E1[(self.mask) & (self.loc_eig.chrom == ch) 
-                & (self.loc_eig.start >= start) & (self.loc_eig.end <= end)].values
-                for ch, start, end in regions]
-
-
-        self.constrain_transmat = constrain_transmat
-
-    def analyze(self):
-        indexes = self.mask[self.mask].index
-        # Create binary model
-        conditions, choices = [(self.loc_eig.E1 >= 0), (self.loc_eig.E1 < 0)], [1, 0]
-        self.loc_eig["binary"] = np.select(conditions, choices, default=np.nan)
-        i = 1
-        self.predicted = dict()
-        for dat in self.data:
-            if len(dat) == 0:
-                continue
-            model, pred = train_models(dat.reshape(-1, 1), constrain_transmat=self.constrain_transmat)
-            # Check if model is shifted
-            if self.check_model(model):
-                break
-            for key, value in pred.items():
-                self.predicted[key] = np.concatenate(
-                    (self.predicted.get(key, np.array([])), value)
-                )
-        for n in range(2, 7):
-            self.loc_eig["HMM" + str(n)] = pd.Series(
-                data=self.predicted[n], index=indexes
-            )
-        signal = self.loc_eig.HMM3.values[indexes]
-
-        # Create Post Processed 3 to 5 state model
-        postsignal = postprocess_3_to_5_states(signal)
-        self.loc_eig["HMM5_2"] = pd.Series(data=postsignal, index=indexes)
-
-    def check_model(self, model):
-        shifted = False
-        for n in range(2, 7):
-            l = model[n].means_
-            flag = 0
-            if not np.array_equal(l, np.sort(l, axis=0)):
-                print("Model " + str(n) + " Means shifted")
-                print("------------------------------------")
-                shifted = True
-
-        return shifted
-
-def auto_analyze(df, constrain_transmat=False, regions=None):
-    if regions:
-        print("Using custom regions")
-    a = HMMC(df, constrain_transmat=constrain_transmat, regions=regions)
-    a.analyze()
-    return a.loc_eig
