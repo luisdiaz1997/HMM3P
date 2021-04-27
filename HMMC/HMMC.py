@@ -154,7 +154,7 @@ def get_segmentation(eig_df,
         try: 
             if state is 'binary':
                 seg = (seg_df.E1.copy())
-                seg[mask] = seg[mask] >0        
+                seg[mask] = np.where(seg[mask] > 0, 1, 0)      
             elif '3P' in state:
                 seg = _postprocess_seg(seg_df, state, 
                                       regions, constrain_transmat)
