@@ -2,6 +2,8 @@ import numpy as np
 from hmmlearn import hmm
 import pandas as pd
 import bioframe as bf
+# import warnings
+# warnings.filterwarnings("error")
 
 """
     Tools for Hidden Markov Models for segmenting 
@@ -10,11 +12,11 @@ import bioframe as bf
 
 
 def _make_transmat(n_states, constrained=False):
-    transmat = np.ones((n_states, n_states)) / n_states
-    np.fill_diagonal(transmat, (1 - 1 / n_states))
+    transmat = np.ones((n_states, n_states)) / 100#n_states
+    np.fill_diagonal(transmat, (1 - 1 / (n_states+1)))
 
     if n_states is 4 and constrained is True:
-        small = 1e-4
+        small = 0
         # dis-allow transitions between B and B-in-A
         transmat[0, 2] = small
         # dis-allow transitions between A-in-B and A or B-in-A
@@ -25,7 +27,7 @@ def _make_transmat(n_states, constrained=False):
         transmat[3, 1] = small
 
     if n_states is 5 and constrained is True:
-        small = 1e-4
+        small = 0
         transmat[0, 3:] = small
         transmat[1, 2:] = small
         transmat[2, 1] = small
@@ -34,7 +36,7 @@ def _make_transmat(n_states, constrained=False):
         transmat[4, :2] = small
 
     if n_states is 6 and constrained is True:
-        small = 1e-4
+        small = 0
         transmat[0, 3:5] = small
         transmat[1, 2:] = small
         transmat[2, 0:2] = small
@@ -48,29 +50,45 @@ def _make_transmat(n_states, constrained=False):
     return transmat
 
 def _init_percentiles(n):
+    if n==1:
+        return np.array([50])
+    
     return np.append(
-        np.array([18]),
-        np.append(50 if n == 3 else np.linspace(45, 55, n - 2), np.array([82])),
+#         np.array([18]),
+        np.array([5]),
+        np.append(50 if n == 3 else np.linspace(15, 85, n - 2), np.array([95])),
+#         np.append(50 if n == 3 else np.linspace(20, 55, n - 2), np.array([82])),
+#         np.append(50 if n == 3 else np.array([50]* (n - 2)), np.array([82])),
+
     )
 
-def _build_model(data, n_components, constrain_transmat=False, n_iter=100, ):
+def _build_model(data, n_components, constrain_transmat=False, n_iter=1000, ):
     transmat = _make_transmat(n_components, constrained=constrain_transmat)
     means = np.percentile(data, _init_percentiles(n_components)).reshape(-1, 1)
+    covariance = np.std(data.reshape(-1))
+#     print(covariance)
     model = hmm.GaussianHMM(
         n_components,
         algorithm="viterbi",
-        transmat_prior=1 + (10 ** (n_components - 2)) * transmat,
-        means_weight=10 if n_components == 2 else 10e4,
-        means_prior=means,
-        covariance_type="diag",
+#         transmat_prior=1 + transmat*(10 ** (n_components - 2)) ,
+#         means_weight=10 if n_components == 2 else 10e5,
+#         means_weight=1e5,
+#         means_prior=means,
+        covariance_type="spherical",
         params="smct",
-        init_params="sc",
+        init_params="s",
+#         covars_prior = covariance,
+        tol = 1e-10,
         n_iter=n_iter,
     )
 
     model.transmat_ = transmat
     model.means_ = means
+    model.covars_ = np.array([covariance]*n_components)[:, None]
     model.fit(data)
+#     print("means", model.means_)
+#     print("transmat", model.transmat_)
+#     print("covariance", model.covars_)
     return model
 
 def _bic_hmm(model, data):
@@ -87,21 +105,57 @@ def _bic_hmm(model, data):
     bic = -2 * log_likelihood + dof * np.log(n_samples)
     return bic
 
+def _E1_data(seg_df, region):
+    data = bf.select(seg_df, region).E1
+    data = data.iloc[~data.isna().values]
+    inds = data.index
+    data_reshaped = data.values.reshape(-1, 1)
+    return inds, data_reshaped
+
+
 def _run_model(seg_df, n_components, regions, constrain_transmat):
     seg = np.zeros((len(seg_df),) )*np.nan
     bic = 0
     for region in regions:
-        data = bf.select(seg_df, region).E1
-        data = data.iloc[~data.isna().values]
-        inds = data.index
-        data_reshaped = data.values.reshape(-1, 1)
+#         print(region)
+        is_chrom = type(region) is str
+    
+        inds, data_reshaped = _E1_data(seg_df, region)
+        
+        if len(data_reshaped)==0:
+            continue
+        
+        if len(data_reshaped) < 2*(n_components**2):
+            if is_chrom:
+                print("skipped chrom", region)
+            else:
+                print("not enough data in region", region, "fitting entire chromosome instead")
+                inds, data_reshaped = _E1_data(seg_df, region[0])
+            
         model = _build_model(data_reshaped, 
             n_components,constrain_transmat=constrain_transmat)
-        _check_model(model)
+        
         predicted = model.predict(data_reshaped)
         bic_region = _bic_hmm(model, data_reshaped)
+        
+        
+        try:
+            _check_model(model, region)
+            
+        except ValueError as inst:
+            print(inst)
+            print("models means", model.means_.reshape(-1))
+            means_order = np.argsort(np.argsort(model.means_.reshape(-1)))
+            print("predicted before", predicted)
+            predicted = means_order[predicted.reshape(-1)].reshape(predicted.shape)
+            print("predicted after", predicted)
+            
+        
+        
+
         bic += bic_region
         seg[inds] = predicted 
+        
     return seg, bic
 
 def _get_state_num(state):
@@ -175,8 +229,8 @@ def get_segmentation(eig_df,
 def _postprocess_seg(seg_df, state, regions, constrain_transmat):
     if '3' not in state:
         raise ValueError("initial segmentation must have 3 states")
-    if state in seg_df.keys():
-        seg = seg_df[state].values[indexes]
+    if 'HMM3' in seg_df.keys():
+        seg = seg_df['HMM3'].values
     else: 
         seg, bic = _run_model(seg_df, _get_state_num(state),
                               regions, constrain_transmat)    
@@ -194,7 +248,8 @@ def _postprocess_seg(seg_df, state, regions, constrain_transmat):
     hmm3p[~mask] =  sig * 2 + correction + 2
     return hmm3p
 
-def _check_model(model):
+def _check_model(model, region):
     l = model.means_
     if not np.array_equal(l, np.sort(l, axis=0)):
-        raise ValueError('state means shifted during model training')
+        raise ValueError(len(l), '-state model means shifted during model training at region:', region,
+                        "means values:", l)
