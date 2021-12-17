@@ -12,9 +12,9 @@ import pandas as pd
 
 # defining colors for plotting segmentation maps
 
-names = {'HMM3': ['B', 'M', 'A', 'N','N'], 
+names = {'HMM3': ['B', 'M', 'A', 'N','N', 'N'], 
          'HMM3P':['B', 'Mbb', 'M', 'Maa', 'A', 'N'],
-         'binary':['B', 'A', 'N','N','N'],
+         'binary':['B', 'A', 'N','N','N', 'N'],
          'HMM5':['B', 'Mbb', 'M', 'Maa', 'A', 'N'],
         }
 
@@ -72,6 +72,7 @@ def track_to_mat(hmm_track, region, annotation_type, pallete, heatmap_width = 5,
         mat_c = mat_c.T
     return mat_c
 
+
 def cmap_from_bed(bed_df, rgb = True):
     unique_colors = bed_df.rgb.unique().reshape(-1)
     if rgb:
@@ -111,8 +112,23 @@ def plot_track(hmm_track, region, annotation_type, pallete):
                for i in range(len(np.unique(names[annotation_type])) )]
     plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
     plt.axis('off');
-
     
+    
+def plot_bedtrack(bed_track, region, figure_width=10, rgb=True):
+    plt.figure(figsize=(figure_width, figure_width/10))
+    cmap = cmap_from_bed(bed_track, rgb) 
+    mat = bed_to_mat(bed_track, region)
+    im = plt.imshow(mat,cmap=matplotlib.colors.ListedColormap(cmap), vmin=0, vmax=len(cmap), aspect='auto')
+    
+    # handling the legend
+    names = bed_track.name.unique().reshape(-1)
+    order = np.argsort(names)
+    names = list(names[order])
+    colors = [im.cmap(im.norm(i)) for i in order]
+    patches = [ mpatches.Patch(color=color, label=name) for name, color in zip(names, colors)]
+    plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+    plt.axis('off');
+
 def names_to_nums(name_sig):
     mask = name_sig=='N'
     name_sig = OrdinalEncoder().fit_transform(name_sig.reshape(-1, 1)).reshape(-1)
@@ -135,7 +151,7 @@ def plotmap(hic_cooler, bed_track, region1, region2, rgb=True, figure_width=5, p
     
     mat_c = bed_to_mat(bed_track, region2, horizontal=False)
     cmap = cmap_from_bed(bed_track, rgb)
-    ax0.matshow(mat_c,cmap=matplotlib.colors.ListedColormap(cmap), aspect='auto')
+    ax0.matshow(mat_c,cmap=matplotlib.colors.ListedColormap(cmap), aspect='auto', vmin=0, vmax=len(cmap))
     ax0.axis('off')
     ax0.margins(0)
     ax0.set_ylim([(mat_c.shape[0]-1), 0])
@@ -146,7 +162,7 @@ def plotmap(hic_cooler, bed_track, region1, region2, rgb=True, figure_width=5, p
     # plot horizontal segmentation map
     ax1= plt.subplot(gs[0:2, 2:])
     mat_c = bed_to_mat(bed_track, region1, horizontal=True)
-    ax1.matshow(mat_c,cmap=matplotlib.colors.ListedColormap(cmap), aspect='auto')
+    ax1.matshow(mat_c,cmap=matplotlib.colors.ListedColormap(cmap), aspect='auto', vmin=0, vmax=len(cmap))
     ax1.axis('off')
     ax1.margins(0)
     ax1.set_xlabel('Position along'+ chrm1 +'(50Kb)')
@@ -191,5 +207,7 @@ def plotmap(hic_cooler, bed_track, region1, region2, rgb=True, figure_width=5, p
     if plotColorbar:
         cbar_ax = fig.add_axes([1.05, 0.2, 0.025, 0.3])
         cbar = fig.colorbar(im, cax=cbar_ax, shrink = .7, label='log10 contact freq')
+        
+    plt.close(fig)
     
     return fig
